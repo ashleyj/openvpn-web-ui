@@ -17,6 +17,8 @@ import (
 
 type NewCertParams struct {
 	Name string `form:"Name" valid:"Required;"`
+	Passphrase string `form:"Passphrase" valid:"Required;MinSize(6);MaxSize(1024)"`
+	Repassphrase string `form:"Repassphrase" valid:"Required;"`
 }
 
 type CertificatesController struct {
@@ -113,7 +115,7 @@ func (c *CertificatesController) Post() {
 		if vMap := validateCertParams(cParams); vMap != nil {
 			c.Data["validation"] = vMap
 		} else {
-			if err := lib.CreateCertificate(cParams.Name); err != nil {
+			if err := lib.CreateCertificate(cParams.Name, cParams.Passphrase); err != nil {
 				beego.Error(err)
 				flash.Error(err.Error())
 				flash.Store(&c.Controller)
@@ -121,6 +123,12 @@ func (c *CertificatesController) Post() {
 		}
 	}
 	c.showCerts()
+}
+
+func (cert *NewCertParams) Valid(v *validation.Validation) {
+        if cert.Passphrase != cert.Repassphrase {
+                v.SetError("Repassphrase", "Passphrases do not match")
+        }
 }
 
 func validateCertParams(cert NewCertParams) map[string]map[string]string {

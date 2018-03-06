@@ -6,9 +6,10 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
+	"bufio"
 	"github.com/adamwalach/openvpn-web-ui/models"
 	"github.com/astaxie/beego"
+	"log"
 )
 
 //Cert
@@ -93,20 +94,50 @@ func trim(s string) string {
 	return strings.Trim(strings.Trim(s, "\r\n"), "\n")
 }
 
-func CreateCertificate(name string) error {
+func CreateCertificate(name string, passphrase string) error {
 	rsaPath := "/usr/share/easy-rsa/"
 	varsPath := models.GlobalCfg.OVConfigPath + "keys/vars"
 	cmd := exec.Command("/bin/bash", "-c",
 		fmt.Sprintf(
 			"source %s &&"+
 				"export KEY_NAME=%s &&"+
-				"%s/build-key --batch %s", varsPath, name, rsaPath, name))
+				"%s/build-key --batch --pass %s", varsPath, name, rsaPath, name))
 	cmd.Dir = models.GlobalCfg.OVConfigPath
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		beego.Debug(string(output))
+	stdin, err := cmd.StdinPipe()
+	if nil != err {
+		beego.Debug("Error getting stdin pipe")
 		beego.Error(err)
 		return err
 	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		beego.Debug("Error getting stderr pipe")
+		beego.Error(err)
+		return err
+	}
+	errScanner := bufio.NewScanner(stderr)
+
+	go func() {
+		for errScanner.Scan() {
+			log.Printf("Reading from subprocess: %s", errScanner.Text())
+			stdin.Write([]byte(passphrase + "\n"))
+		}
+	} ()
+
+	if err := cmd.Start(); nil != err {
+		beego.Debug("Error running command")
+		beego.Error(err)
+		return err
+	}
+ 
+        err = cmd.Wait()
+        if err != nil {
+		beego.Debug("Error waiting for command")
+		beego.Error(err)
+                return err
+        }
+
 	return nil
+
 }
